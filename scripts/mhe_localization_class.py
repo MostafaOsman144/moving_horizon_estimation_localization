@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-    Moving Horizon Estimation Localization (WPGO)
+    Moving Horizon Estimation Localization
     Copyright (C) Spring 2020  Mostafa Osman
 
     This program is free software: you can redistribute it and/or modify
