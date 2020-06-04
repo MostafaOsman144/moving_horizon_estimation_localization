@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+
+<launch>
+	<node pkg="rosbag" name="recording" type="record" output="screen" args="record -o /home/inst/Downloads/ukf_results/ /fusion_odometry /velodyne_odometry /gps_odometry_noisy /integrated_to_init /ground_truth_odometry /aft_mapped_to_init /imu/data" />
+</launch>

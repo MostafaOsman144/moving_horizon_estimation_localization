@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+
+<launch>
+	<rosparam param="use_sim_time">true</rosparam>
+	<node pkg="rosbag" name="recording" type="record" output="screen" args="record -o /home/inst/Downloads/mhe_summit/ /fusion_odometry /encoder_odometry_local /lidar_odometry_local /visual_odometry_local /ground_truth /imu_odometry_local" />
+</launch>

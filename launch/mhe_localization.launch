@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+
+<launch>
+	<rosparam param="use_sim_time">true</rosparam>
+	<node pkg="mhe_localization" name="mhe_localization" type="mhe_localization_node.py" output="screen"/>
+	<rosparam command="load" file="$(find mhe_localization)/config/mhe_localization.yaml" />
+	
+	<!--node pkg="wheel_odometry" type="encoder_odometry" name="encoder_odometry" clear_params="true">
+	</node-->
+	<!--rosparam command="load" file="$(find wheel_odometry)/config/encoder_odometry.yaml"/-->
+	<!--rosparam command="load" file="$(find icab_launch)/config/icab1.yaml"/-->
+	
+	<!--node pkg="covariance_estimation" type="covariance_estimation" name="covariance_estimation">
+		<rosparam command="load" file="$(find covariance_estimation)/config/covariance_estimation_encoder.yaml" />
+	</node-->
+</launch>

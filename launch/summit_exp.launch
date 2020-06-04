@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+
+<launch>
+	<rosparam param="use_sim_time">true</rosparam>
+	<include file="$(find laser_scan_matcher)/launch/lidar_odometry.launch"/>
+
+	<!--node pkg = "monocular_visual_odometry" name="monocular_visual_odometry" type="mvo_node.py" output="screen">
+		<rosparam command="load" file="$(find monocular_visual_odometry)/params/monocular_visual_odometry.yaml"/>
+	</node-->
+	
+	<!--node pkg="lsi_robot_localization" type="ukf_localization_node" name="ukf_se" clear_params="true" output="screen">
+    	<rosparam command="load" file="$(find lsi_robot_localization)/params/ukf_summit.yaml" />
+    	<remap from="odometry/filtered" to="fusion_odometry"/>
+  	</node-->	
+
+
+	<node pkg="mhe_localization" name="mhe_localization" type="mhe_localization_node.py" output="screen"/>
+	<rosparam command="load" file="$(find mhe_localization)/config/mhe_localization.yaml" />	
+	
+	<node pkg="local_odometries" name="encoder_odometry" type="encoder_odometry.py" output="screen" />
+	<node pkg="local_odometries" name="visual_odometry" type="visual_odometry.py" output="screen" />
+	<node pkg="local_odometries" name="lidar_odometry" type="lidar_odometry.py" output="screen" />
+	<node pkg="local_odometries" name="imu_odometry" type="imu_odometry.py" output="screen" />
+	<node pkg="local_odometries" name="ground_truth" type="ground_truth.py" output="screen" />	
+
+	
+</launch>

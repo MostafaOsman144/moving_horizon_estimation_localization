@@ -1,0 +1,336 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Feb 26 10:52:18 2019
+
+@author: jpvcener
+"""
+
+from sys import path
+path.append(r"C:\Users\josep\Documents\Python Scripts\casadi-windows-py37-58aa427")
+from casadi import *
+import math
+import numpy as np
+
+
+############################################################
+# Formulate the MPC problem to move our robot
+# This is the motion our MHE Problem will try to estimate 
+############################################################
+
+T = 0.1 # Time horizon
+N = 10 # number of control intervals
+
+X_max = 2; 
+X_min = -X_max
+Y_max = 2; 
+Y_min = -Y_max
+omega_max = math.inf; 
+omega_min= -omega_max
+v_max = math.inf; 
+v_min = -v_max
+w_max = math.inf; 
+w_min = -w_max
+
+#setting up symbolic variables for states 
+x = SX.sym('x'); y = SX.sym('y'); theta = SX.sym('theta')
+states = vertcat(x,y,theta)
+n_states = states.size1()
+ 
+#setting up symbolic variables for control inputs 
+vX = SX.sym('vX'); vY = SX.sym('vY'); omega = SX.sym('omega')
+controls = vertcat(vX,vY,omega); n_controls = controls.size1()
+rhs = vertcat(vX*cos(theta)-vY*sin(theta),vX*sin(theta)+vY*cos(theta),omega) # system r.h.s
+
+f = Function('f',[states,controls],[rhs]) # nonlinear mapping function f(x,u), system equation 
+U = SX.sym('U',n_controls,N) # Decision variables (controls), optimal control input as determined by optimizer 
+P = SX.sym('P',n_states + n_states)
+# parameters (which include the initial and the reference/final desired state of the robot)
+ 
+X = SX.sym('X',n_states,(N+1))
+
+obj = 0; # Objective function
+g = [];  # constraints vector
+
+Q = horzcat([1,0,0],[0,1,0],[0,0,1])
+R = horzcat([0.5,0,0],[0,0.5,0],[0,0,0.5])
+
+st  = X[:,0] # initial state
+g = vertcat(g, st-P[0:3]) # initial condition constraints
+# weighing matrices (controls)
+# compute objective symbollically this is what the solver will minimize 
+for k in range(0,N):
+    st = X[:,k]
+    con = U[:,k]
+    obj = obj+mtimes(mtimes((st-P[3:6]).T,Q),(st-P[3:6]))+ mtimes(mtimes(con.T,R),con) # calculate obj
+    st_next = X[:,k+1]
+    f_value = f(st,con);
+    st_next_euler = st+ (T*f_value);
+    g = vertcat(g,st_next-st_next_euler) #compute constraints
+    
+#setup variables for input contraints
+w_max =27
+wheel_rad = 0.127
+a = 0.2225
+b = 0.205
+
+H = np.array(([1, -1, (-a-b)],
+    [1, 1, (a+b)],
+    [1, -1, (a+b)],
+    [1, 1, (-a-b)]))
+
+for k in range(0,N):
+    g = vertcat(g, (mtimes(H,U[:,k])-np.ones((4,1))*wheel_rad*w_max))
+    
+# make the decision variables one column vector, these alternate between
+# states 
+OPT_variables = vertcat(reshape(X,3*(N+1),1), reshape(U,3*N,1))
+
+nlp_prob = {'f':obj, 'x':OPT_variables, 'g':g, 'p':P}
+solver = nlpsol('solver', 'ipopt', nlp_prob)
+
+lbg = np.zeros((7*N+3,1))  
+ubg = np.zeros((7*N+3,1))
+ 
+lbx = np.zeros(3*(N+1)+3*N)
+ubx = np.zeros(3*(N+1)+3*N)
+
+#g constraints max wheel velocity 
+lbg[3*(N+1):3*(N+1)+4*N] = -math.inf
+ubg[3*(N+1):3*(N+1)+4*N] = 0
+
+# input constraints
+for k in range(0,N+1):
+    lbx[3*k-3] = X_min; 
+    lbx[3*k-2] = Y_min; 
+    lbx[3*k-1]   = omega_min;
+    ubx[3*k-3] = X_max; 
+    ubx[3*k-2] = Y_max; 
+    ubx[3*k-1]   = omega_max;
+
+for k in range(0,N):
+    lbx[3*N+3*k-2] = v_min
+    ubx[3*N+3*k-2] = v_max
+    lbx[3*N+3*k-1] = v_min
+    ubx[3*N+3*k-1] = v_max
+    lbx[3*N+3*k] = w_min
+    ubx[3*N+3*k] = w_max
+    
+args = {'lbg':lbg,'ubg':ubg,'lbx':lbx,'ubx':ubx, 'p':P, 'x0':[]}
+
+#----------------------------------------------
+# ALL OF THE ABOVE IS JUST A PROBLEM SETTING UP
+
+ 
+# THE SIMULATION LOOP SHOULD START FROM HERE
+#-------------------------------------------
+t0 = 0;
+x0 = np.array([[0.1], [0.1] , [0.0]]);    # initial condition.
+xs = np.array([[1.5], [1.5], [0]]); # Reference posture.
+
+xx = np.array(x0); # xx contains the history of states
+t = np.array(t0);
+ 
+u0 = np.zeros((N,n_controls)) # three control inputs 
+X0 = repmat(x0,1,N+1)
+ 
+sim_tim = 10; #Maximum simulation time
+ 
+# Start MPC
+mpciter = 0;
+
+xx1 = []
+u_cl= []
+
+while np.linalg.norm((x0-xs),2) > 1e-2 and mpciter < sim_tim / T:
+    
+    args['p'] = vertcat(x0,xs) # set the values of the parameters vector
+    args['x0'] = vertcat(reshape(X0.T, 3*(N+1),1),reshape(u0.T,3*N,1));
+    sol = solver(x0= args['x0'], lbx= args['lbx'], ubx= args['ubx'],lbg= args['lbg'], ubg= args['ubg'],p = args['p']);    
+   
+ 
+    u = reshape((sol['x'][3*(N+1):]).T,n_controls,N).T
+    xx1.append(reshape((sol['x'][0:3*(N+1)]).T,n_states,N+1).T)
+    u_cl = vertcat(u_cl,np.array(u[1,:]))
+    
+    X0 = reshape(sol['x'][0:3*(N+1)].T,3,N+1).T; # get solution TRAJECTORY
+    #add shift function into the loop
+    st = x0
+    con = u[0,:].T
+    f_value = f(st,con);
+    st = st + (T*f_value);
+    x0 = st
+    
+    t0 = t0 + T;
+    u0 = vertcat(u[0:N-1,:],u[N-1,:])
+
+    #end of the shift function
+    
+    t = np.append(t,t0);
+    
+    # Shift trajectory to initialize the next step
+    X0 = vertcat(X0[1:],X0[-1])
+
+     
+    xx = horzcat(xx,x0)  
+    mpciter = mpciter + 1
+    
+#############################################
+# Simulate measurements from our robot 
+# This is what the MHE will use for state estimation 
+#############################################
+
+con_cov = np.square(np.array(([0.005, 0, 0],[0, 0.005, 0], [0, 0, np.deg2rad(2)])))
+meas_cov = np.square(np.array(([0.1, 0], [0, np.deg2rad(2)])))
+
+r = []
+alpha = []
+
+for k in range(0,xx.size2()):
+    r = vertcat(r, (sqrt(xx[0,k]**2+xx[1,k]**2) + sqrt(meas_cov[0,0])*np.random.normal(1)))
+    alpha = vertcat(alpha, (atan(xx[1,k]/xx[0,k]) + sqrt(meas_cov[1,1])*np.random.normal(1)))
+
+y_measurements = horzcat(r, alpha)
+    
+    
+#############################################
+# Formulate the  MHE problem 
+#  Start with setting up the problem symbolycally 
+############################################  
+
+T = 0.1 # Time horizon
+N_MHE = 6 # number of control intervals
+n_meas = 2
+
+X_max = 2; 
+X_min = -X_max
+Y_max = 2; 
+Y_min = -Y_max
+omega_max = math.inf; 
+omega_min= -omega_max
+v_max = math.inf; 
+v_min = -v_max
+w_max = math.inf; 
+w_min = -w_max
+
+#setting up symbolic variables for states 
+x = SX.sym('x'); y = SX.sym('y'); theta = SX.sym('theta')
+states = vertcat(x,y,theta)
+n_states = states.size1()
+ 
+#setting up symbolic variables for control inputs 
+vX = SX.sym('vX'); vY = SX.sym('vY'); omega = SX.sym('omega')
+controls = vertcat(vX,vY,omega); n_controls = controls.size1()
+rhs = vertcat(vX*cos(theta)-vY*sin(theta),vX*sin(theta)+vY*cos(theta),omega) # system r.h.s
+
+f = Function('f',[states,controls],[rhs]) # nonlinear mapping function f(x,u), system equation 
+
+r = SX.sym('r'); alpha = SX.sym('alpha') # range and bearing
+measurement_rhs = vertcat(sqrt(x**2+y**2), atan(y/x))
+h = Function('h',[states],[measurement_rhs]); # MEASUREMENT MODEL
+
+U = SX.sym('U',n_controls,N_MHE) # Decision variables (controls), optimal control input as determined by optimizer 
+X = SX.sym('X',n_states,(N_MHE+1));  #(states) [remember multiple shooting]
+
+P = SX.sym('P', n_controls ,N_MHE + (N_MHE+1)) #parameters (include r and alpha measurements as well as controls measurements)
+
+V = np.linalg.inv(np.sqrt(meas_cov)) # weighing matrices (output)  y_tilde - y
+W = np.linalg.inv(np.sqrt(con_cov)) # weighing matrices (input)   u_tilde - u
+    
+obj = 0; # Objective function
+g = [];  # constraints vector
+
+for k in range(0,N_MHE+1):
+    st = X[:,k]
+    h_x = h(st)
+    y_tilde = P[0:n_meas,k]
+    obj = obj+ mtimes((y_tilde-h_x).T, mtimes(V, (y_tilde-h_x))) # calculate obj
+ 
+
+for k in range(0,N_MHE):
+    con = U[:,k]
+    u_tilde = P[:,N_MHE+ k]
+    obj = obj+ mtimes((u_tilde-con).T, mtimes(W, (u_tilde-con))) # calculate obj
+
+# multiple shooting constraints
+for k in range(0,N_MHE):
+    st = X[:,k]
+    con = U[:,k]
+    st_next = X[:,k+1]
+    f_value = f(st,con)
+    st_next_euler = st+ (T*f_value)
+    g = vertcat(g,st_next-st_next_euler) #compute constraints
+
+OPT_variables = vertcat(reshape(X, 3*(N_MHE+1), 1), reshape(U, 3*N_MHE,1))
+		
+nlp_prob = {'f': obj, 'x': OPT_variables, 'g': g, 'p':P}
+	
+opts = {
+			'ipopt.max_iter': 2000,
+			'ipopt.print_level': 0,
+			'print_time': 0,
+			'ipopt.acceptable_tol': 1e-8,
+			'ipopt.acceptable_obj_change_tol': 1e-6}
+		
+solver = nlpsol('solver', 'ipopt', nlp_prob, opts)
+    
+lbg = np.zeros((3*N_MHE,1))  
+ubg = np.zeros((3*N_MHE,1))
+ 
+lbx = np.zeros((3*(N_MHE+1)+3*N_MHE,1))
+ubx = np.zeros((3*(N_MHE+1)+3*N_MHE,1))
+
+# input constraints
+for k in range(0,N_MHE+1):
+    lbx[3*k-3] = X_min; 
+    lbx[3*k-2] = Y_min; 
+    lbx[3*k-1]   = omega_min;
+    ubx[3*k-3] = X_max; 
+    ubx[3*k-2] = Y_max; 
+    ubx[3*k-1]   = omega_max;
+
+for k in range(0,N_MHE):
+    lbx[3*N_MHE+3*k-2] = v_min
+    ubx[3*N_MHE+3*k-2] = v_max
+    lbx[3*N_MHE+3*k-1] = v_min
+    ubx[3*N_MHE+3*k-1] = v_max
+    lbx[3*N_MHE+3*k] = w_min
+    ubx[3*N_MHE+3*k] = w_max    
+
+args = {'lbg':lbg,'ubg':ubg,'lbx':lbx,'ubx':ubx, 'p':P, 'x0':[]}
+#############################################
+# Completes MHE Setup
+#  Start looping through MHE Simulation
+############################################ 
+  
+X_estimate = []; # X_estimate contains the MHE estimate of the states
+U_estimate = []; # U_estimate contains the MHE estimate of the controls
+
+U0 = np.zeros((N_MHE,3));   # two control inputs for each robot
+X0 = np.zeros((N_MHE+1,3)); # initialization of the states decision variables
+
+# Start MHE
+mheiter = 0;
+
+#y_measurements = np.array(y_measurements)
+U0 = u_cl[:N_MHE,:] # initialize the control actions by the measured
+
+# initialize the states from the measured range and bearing
+X0[:,0:2] = horzcat(y_measurements[0:N_MHE+1,0]*cos(y_measurements[0:N_MHE+1,1]),
+    y_measurements[0:N_MHE+1,0]*sin(y_measurements[0:N_MHE+1,1]))
+
+for k in range(0, y_measurements.size1() - (N_MHE)):
+    mheiter = k
+    # Get the measurements window and put it as parameters in p
+    args['p'] = horzcat(horzcat(y_measurements[k:k+N_MHE+1,:],DM.zeros(N_MHE+1,1)).T, u_cl[k:k+N_MHE,:].T)
+    # initial value of the optimization variables
+    args['x0']  = vertcat(reshape(X0.T, 3*(N_MHE+1),1), reshape(U0.T,n_controls*N_MHE,1));
+    sol = solver(x0= args['x0'], lbx= args['lbx'], ubx= args['ubx'],lbg= args['lbg'], ubg= args['ubg'],p = args['p']);   
+                 
+    U_sol = reshape((sol['x'][3*(N_MHE+1)-1:-1]).T,n_controls,N_MHE).T # get controls only from the solution
+    X_sol = reshape((sol['x'][0:3*(N_MHE+1)]).T,n_states,N_MHE+1).T # get solution TRAJECTORY
+    X_estimate = vertcat(X_estimate, X_sol[N_MHE,:])
+    U_estimate = vertcat(U_estimate, U_sol[N_MHE-1,:])
+    
+    # Shift trajectory to initialize the next step
+    X0 = vertcat(X_sol[0:-1,:],X_sol[-1,:])
+    U0 = vertcat(U_sol[0:-1,:],U_sol[-1,:])

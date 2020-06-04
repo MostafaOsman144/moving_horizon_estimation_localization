@@ -1,0 +1,39 @@
+# Define the freqency at which the MHE localization will be running
+node_frequency: 5
+
+# Define the estimatiion horizon for the MHE localization
+estimation_horizon: 10
+
+# The Number of Odometries to be fused using the MHE localization Package
+N_of_Odometries: 1
+N_of_imus: 0
+
+# The name of each of the odometries topics to be fused
+# The name of the parameter must be in the format "odom_i" where i \in {0,1,2,..., N_of_Odometries - 1}
+odom_0: /topic_name
+#odom_1: /gps_odometry_noisy
+
+imu_0: /imu_odometry_local
+
+#odom_0: /icab1/encoder_odometry_with_covariance
+#odom_1: /icab1/gps_with_angle_odometry
+#odom_2: /icab1/visual_odometry
+#odom_3: /icab1/gps_compass_odometry
+
+# Indicate the states being read by each of the odometries
+odom_0_config: [true, true, false,
+                false, false, false,
+                false, false, false,
+                false, false, false,
+                false, false, false]
+                
+imu_0_config: [false, false, false, 
+               true, true, true, 
+               false, false, false, 
+               true, true, true,
+               false, false, false]
+                
+# Define your mahalanobis threshold for each sensor
+odom_0_mahalanobis_threshold: 10
+
+imu_0_mahalanobis_threshold: 10
