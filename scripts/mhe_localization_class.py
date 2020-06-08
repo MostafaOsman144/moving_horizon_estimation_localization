@@ -34,8 +34,14 @@ from nav_msgs.msg import Odometry
 
 # Importing Casadi
 from sys import path
+import rospkg
 
-path.append(r"/home/inst/casadi-linux-py27-58aa427")
+rospack = rospkg.RosPack()
+rospack.list()
+casadiPath = rospack.get_path('mhe_localization')
+casadiPath = casadiPath + '/libs/casadi-linux-py27-58aa427'
+path.append(casadiPath)
+
 from casadi import *
 
 
