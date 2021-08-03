@@ -10,3 +10,14 @@ This repository is a ROS package witten in python and contains the code for a ge
 
 **Author**: Mostafa Osman
 
+If you use this code in your research, please cite:
+```
+@article{osman2021generic,
+  title={A generic multi-sensor fusion scheme for localization of autonomous platforms using moving horizon estimation},
+  author={Osman, Mostafa and Mehrez, Mohamed W and Daoud, Mohamed A and Hussein, Ahmed and Jeon, Soo and Melek, William},
+  journal={Transactions of the Institute of Measurement and Control},
+  pages={01423312211011454},
+  year={2021},
+  publisher={SAGE Publications Sage UK: London, England}
+}
+```
