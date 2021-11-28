@@ -2,7 +2,7 @@
 
 """
     Moving Horizon Estimation Localization
-    Copyright © 2020 <copyright holders>
+    Copyright © 2020 Mostafa Osman
 
     Permission is hereby granted, free of charge, 
     to any person obtaining a copy of this software 
